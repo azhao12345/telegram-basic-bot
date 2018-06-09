@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: telegram.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: telegram.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>'use strict';
+var https = require('https');
+var util = require('util');
+var EventEmitter = require('events');
+
+module.exports = TelegramClient;
+
+
+/**
+ * Construct a telegram bot client
+ * @class
+ * @extends EventEmitter
+ * @param {string} token - Telegram bot api token
+ * @param {boolean} [generateMethods=false] - generate named properties for api methods (not recommended)
+ * @param {Object} [extraOptions={}] - extra options to be applied to to https.request
+ */
+function TelegramClient(token, generateMethods, extraOptions) {
+    EventEmitter.call(this);
+    this.token = token;
+    this.extraOptions = (typeof extraOptions === 'undefined') ? {} : extraOptions;
+    if (generateMethods === true) {
+        var telegram = this;
+        require('./methods').forEach(function(method) {
+            telegram[method] = function(args, cb) {
+                return telegram.request(method, args, cb);
+            };
+        });
+    }
+}
+util.inherits(TelegramClient, EventEmitter);
+
+/**
+ * @callback TelegramClient~requestCallback
+ * @param {Error} err
+ * @param {Object} response
+ */
+
+/**
+ * Send an api request to telegram
+ * @param {string} method - API method to call
+ * @param {Object} [args={}] - API call arguments
+ * @param {TelegramClient~requestCallback} [cb] - The callback that handles the response
+ */
+TelegramClient.prototype.request = function(method, args, cb) {
+    if (!args) {
+        args = {};
+    }
+    if (!cb) {
+        cb = function() { };
+    }
+    var argString = JSON.stringify(args);
+    var options = {
+        hostname: 'api.telegram.org',
+        port: '443',
+        path: '/bot' + this.token + '/' + method,
+        headers: {
+            'content-type': 'application/json',
+            'content-length': Buffer.byteLength(argString)
+        },
+        timeout: 1200
+    };
+    Object.assign(options, this.extraOptions);
+    var request = https.request(options, function(res) {
+        res.setEncoding('utf8');
+        var data = '';
+        res.on('data', function(chunk) { data += chunk; });
+        res.on('end', function() {
+            var result = null;
+            try {
+                result = JSON.parse(data);
+            } catch (e) {
+                console.log('warning! non-json result returned');
+            }
+            if (result !== null) {
+                if (result.ok === true) {
+                    cb(null, result.result);
+                } else if (result.description) {
+                    cb('api returned failed ' + result.description);
+                } else {
+                    cb('api returned failed with no description');
+                }
+            } else {
+                cb('api returned invalid json');
+            }
+        });
+    });
+    request.on('timeout', function() {
+        console.log('timed out !!!!!!!!!');
+        cb('timed out');
+    });
+    request.on('error', function(err) {
+        console.log(err);
+        cb('got other error');
+    });
+    request.write(JSON.stringify(args));
+    request.end();
+};
+
+
+/**
+ * Update event
+ * @event TelegramClient#update
+ * @type {object}
+ */
+
+/**
+ * Poll for updates.  Updates are emitted as events
+ * @param {string[]} allowedUpdates - array of updates to poll for
+ * @param {number} interval - polling interval
+ * @param {boolean} [deleteWebhook=false] - delete any previously set webook (not implemented)
+ * @fires TelegramClient#update
+ */
+TelegramClient.prototype.poll = function(allowedUpdates, interval, deleteWebhook) {
+    this.allowedUpdates = allowedUpdates;
+    var updateId = -2;
+    if (this.polling) {
+        return;
+    }
+    if (!interval) {
+        interval = 5000;
+    }
+    var telegram = this;
+    this.polling = true;
+    setInterval(function() {
+        var args = {
+            offset: updateId,
+            allowed_updates: telegram.allowedUpdates
+        };
+        telegram.request('getUpdates', args, function(err, result) {
+            if (err) {
+                console.log('poll failed ' + err);
+                return;
+            }
+            console.log(result);
+            result.forEach(function(update) {
+                updateId = update.update_id + 1;
+                telegram.emit('update', update);
+            });
+        });
+    }, interval);
+};
+
+/**
+ * Set a webhook to listen for updates.  Self signed certificates are not supported. (not implemented yet)
+ * @param {string[]} allowedUpdates - array of updates to poll for
+ * @param {boolean} [setWebhook=false] - configure telegram to set the webhook with the given url
+ * @param {string} [url] - url for telegram to send updates to
+ */
+TelegramClient.prototype.listen = function(allowedUpdates, setWebhook, url) {
+};
+
+
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="TelegramClient.html">TelegramClient</a></li></ul><h3>Events</h3><ul><li><a href="TelegramClient.html#event:update">update</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.5.5</a> on Sat Jun 09 2018 15:44:01 GMT-0700 (PDT)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
